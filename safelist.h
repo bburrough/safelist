@@ -3,7 +3,7 @@
                              -------------------
     begin                : Sun Jul 6 2003
     copyright            : (C) 2003 by Bob Burrough
-    email                : bob@bobburrough.com
+    email                : xxx
  ***************************************************************************/
 
 
