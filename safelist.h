@@ -12,6 +12,7 @@
 
 #include "threadutils.h"
 #include <list>
+#include <functional>
 
 using namespace std;
 
@@ -34,6 +35,25 @@ public:
     void push_back(const T& arg);
     size_t size() const;
     void remove(const T& arg);
+
+    /*
+        visit_all
+
+        Iterate over the list in a thread-safe manner. Your provided
+        visitor is called, passing the item as the argument. Your visitor
+        returns true to continue iterating, or returns false to terminate
+        iteration before reaching the end of the list.
+    */
+    void visit_all(std::function<bool(const T& item)> visitor)
+    {
+        Lock();
+        for (typename list<T>::iterator itr = list<T>::begin(); itr != list<T>::end(); ++itr)
+        {
+            if (!visitor(*itr))
+                break;
+        }
+        Unlock();
+    }
 
 private:
     bool MutexInit();
@@ -78,6 +98,47 @@ private:
 		Unlock();
 		return my_itr;
 	}
+    /*
+        Thinking about the design of SafeList iteration. ...it would be irresponsible
+        to simply allow begin() and end() to be used without enforcing some iteration
+        lock. These functions are so common in regular STL usage that it would be
+        extremely easy to have one thread adding or removing elements to the list
+        while another thread is iterating the list. We must be able to guarantee
+        that iteration is protected across threads.
+       
+        However, I'm also worried about simply allowing begin() and end() to be used
+        and relying upon the caller to make sure they properly acquired the lock. We
+        need enforcement via the interface somehow.
+
+        What we need, functionally:
+
+        list.Lock();
+        for(list::iterator itr = list.begin(); itr != list.end(); ++itr)
+        {
+            // do something with *itr
+        }
+        list.Unlock();
+
+        However, we don't want this particular interface layout, primarily because
+        of the commonality of usage of begin() and end(). It would be easy for a
+        programmer to accidentally do:
+
+        list.insert(list.begin(), item);
+
+        Which is inadvisable because the list can change between the calls to
+        list.begin() and list.insert().
+
+        We could do it at runtime by calling TryLock() (or whatever) inside begin()
+        to verify that the lock had previously been acquired and throwing an exeception
+        if it hadn't been, but that's sloppy runtime enforcement. We'd be better served
+        by a more well defined interface that enforces the proper arrangement at compile
+        time.
+
+        We could write a function that takes a lambda/functor and iterates on every item
+        in the list. I'm trying this. see above:
+
+        void visit_all(std::function<bool>(const T& item) visitor);
+    */
 
 
     bool insert(const typename list<T>::const_iterator& itr_arg, const T& t_arg);
